@@ -1,0 +1,2 @@
+# Motor de render (opcional si tienes un clon local — ver README, opciones B/C)
+AlmaGag @ git+https://github.com/Josexato/AlmaGag
