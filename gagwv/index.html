@@ -108,6 +108,30 @@
     font-size: 12px;
   }
   #zoom-nivel { min-width: 46px; text-align: center; color: #6b7280; }
+  #pestanas {
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--borde);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  #pestanas button {
+    border: 1px solid var(--borde);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: var(--fondo);
+    color: #6b7280;
+    padding: 4px 12px;
+    flex: 0 0 auto;
+  }
+  #pestanas button.activa {
+    background: var(--panel);
+    color: var(--acento);
+    font-weight: 600;
+    border-color: var(--acento);
+  }
   #visor {
     flex: 1;
     overflow: auto;             /* el scroll pedido para moverse por el SVG */
@@ -181,6 +205,8 @@
         </select>
       </label>
       <label><input type="checkbox" id="opt-visualdebug"> visualdebug</label>
+      <label title="Un SVG por fase del layout naciendo — se ven como pestañas sobre el visor">
+        <input type="checkbox" id="opt-epifania"> epifanía (fases)</label>
     </div>
   </section>
 
@@ -194,6 +220,7 @@
       <span style="flex:1"></span>
       <button id="btn-descargar" disabled>⬇ Descargar SVG</button>
     </div>
+    <div id="pestanas" hidden></div>
     <div id="visor">
       <div id="vacio">El SVG aparecerá aquí. Usa el scroll para moverte y los botones para hacer zoom.</div>
       <div id="lienzo" hidden></div>
@@ -208,6 +235,7 @@
   const nombreEl = $('nombre-archivo'), logEl = $('log');
   let nombreArchivo = 'diagrama.sdjf';
   let zoom = 1, naturalW = 0, naturalH = 0, svgActual = null, ultimoSvgTexto = '';
+  let svgFinal = '', fases = [], pestanaActiva = -1;  // -1 = resultado final
 
   // ---------- carga de archivo ----------
   function cargarArchivo(file) {
@@ -247,13 +275,17 @@
             layout_algorithm: $('opt-layout').value,
             view: $('opt-view').value,
             visualdebug: $('opt-visualdebug').checked,
+            visualize_growth: $('opt-epifania').checked,
           },
         }),
       });
       const data = await resp.json();
       mostrarLog(data.log);
       if (data.ok && data.svg) {
-        mostrarSvg(data.svg);
+        svgFinal = data.svg;
+        fases = data.phases || [];
+        construirPestanas();
+        seleccionarPestana(-1);
       } else if (!data.log) {
         mostrarLog('[ERROR] El motor no pudo generar el diagrama.');
       }
@@ -271,6 +303,30 @@
   function mostrarLog(texto) {
     logEl.textContent = (texto || '').trim();
     logEl.style.display = logEl.textContent ? 'block' : 'none';
+  }
+
+  // ---------- pestañas (epifanía: fases del layout) ----------
+  function construirPestanas() {
+    const barra = $('pestanas');
+    barra.innerHTML = '';
+    if (!fases.length) { barra.hidden = true; return; }
+    const tabs = [{ label: 'Resultado', idx: -1 }]
+      .concat(fases.map((f, i) => ({ label: f.label, idx: i })));
+    for (const t of tabs) {
+      const b = document.createElement('button');
+      b.textContent = t.label;
+      b.addEventListener('click', () => seleccionarPestana(t.idx));
+      barra.appendChild(b);
+    }
+    barra.hidden = false;
+  }
+
+  function seleccionarPestana(idx) {
+    pestanaActiva = idx;
+    const barra = $('pestanas');
+    Array.from(barra.children).forEach((b, i) =>
+      b.classList.toggle('activa', i === idx + 1));
+    mostrarSvg(idx === -1 ? svgFinal : fases[idx].svg);
   }
 
   function mostrarSvg(texto) {
@@ -322,7 +378,9 @@
     const blob = new Blob([ultimoSvgTexto], { type: 'image/svg+xml' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = nombreArchivo.replace(/\.(sdjf|gag|json)$/i, '') + '.svg';
+    const sufijo = pestanaActiva >= 0
+      ? '_fase-' + String(pestanaActiva + 1).padStart(2, '0') : '';
+    a.download = nombreArchivo.replace(/\.(sdjf|gag|json)$/i, '') + sufijo + '.svg';
     a.click();
     URL.revokeObjectURL(a.href);
   });

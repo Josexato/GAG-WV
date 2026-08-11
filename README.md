@@ -44,6 +44,11 @@ python -m gagwv --no-browser      # no abrir el navegador
   *Ajustar* al ancho, `Ctrl+rueda` del mouse) y botón para descargar el SVG.
 - Opciones del motor: layout (`select`/`auto`/`hier`/`legacy`), vista
   (`flow`/`areas`/`lanes`/`matrix`) y `visualdebug`.
+- **Epifanía en pestañas**: con el checkbox *epifanía (fases)* activo, el
+  render también captura el flipbook del layout naciendo (equivale a
+  `--epifania` del CLI) y cada fase aparece como una pestaña sobre el visor
+  — *Resultado · 01 posicionamiento · 02 contenedores · 03 ruteo…* — con el
+  mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
 

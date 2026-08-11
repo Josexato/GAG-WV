@@ -5,6 +5,7 @@ renderizado llama a AlmaGag.generator.generate_diagram escribiendo el
 archivo de entrada y el SVG de salida en un directorio temporal.
 """
 
+import glob
 import io
 import json
 import logging
@@ -25,12 +26,36 @@ _render_lock = threading.Lock()
 VALID_EXTENSIONS = ('.sdjf', '.gag')
 
 
+def _label_de_fase(path):
+    """'03_columnas-por-flujo.svg' → '03 · columnas por flujo'."""
+    nombre = os.path.splitext(os.path.basename(path))[0]
+    partes = nombre.split('_', 1)
+    if len(partes) == 2 and partes[0].isdigit():
+        return f"{partes[0]} · {partes[1].replace('-', ' ').replace('_', ' ')}"
+    return nombre.replace('-', ' ').replace('_', ' ')
+
+
+def _recolectar_fases(tmp):
+    """SVGs de la Epifanía escritos bajo <tmp>/debug/ durante el render."""
+    fases = []
+    patron = os.path.join(tmp, 'debug', '**', '*.svg')
+    for path in sorted(glob.glob(patron, recursive=True)):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                fases.append({'label': _label_de_fase(path), 'svg': f.read()})
+        except OSError:
+            continue
+    return fases
+
+
 def render_source(filename, content, layout_algorithm='select', view='auto',
-                  visualdebug=False):
-    """Renderiza el contenido de un .sdjf/.gag y devuelve (ok, svg, log).
+                  visualdebug=False, visualize_growth=False):
+    """Renderiza el contenido de un .sdjf/.gag y devuelve (ok, svg, log, fases).
 
     ok: bool; svg: str con el XML del SVG (o None si falló); log: str con
-    los mensajes WARNING/ERROR del motor durante el render.
+    los mensajes WARNING/ERROR del motor durante el render; fases: lista de
+    {label, svg} con el flipbook de la Epifanía (vacía si visualize_growth
+    está apagado o el motor no capturó fases).
     """
     generate_diagram = cargar_generate_diagram()
 
@@ -53,6 +78,11 @@ def render_source(filename, content, layout_algorithm='select', view='auto',
                 output_path = os.path.join(tmp, 'salida.svg')
                 with open(input_path, 'w', encoding='utf-8') as f:
                     f.write(content)
+                # La Epifanía escribe en debug/epifania/ relativo al cwd:
+                # entrar al tempdir para que sus SVGs caigan ahí (el lock
+                # hace seguro el chdir global durante el render).
+                prev_cwd = os.getcwd()
+                os.chdir(tmp)
                 try:
                     ok = generate_diagram(
                         input_path,
@@ -60,11 +90,14 @@ def render_source(filename, content, layout_algorithm='select', view='auto',
                         layout_algorithm=layout_algorithm,
                         view=view,
                         visualdebug=visualdebug,
+                        visualize_growth=visualize_growth,
                     )
                 except Exception as e:  # el motor no debe tumbar el servidor
                     logging.getLogger(__name__).error(
                         f"Excepción durante el render: {e}")
                     ok = False
+                finally:
+                    os.chdir(prev_cwd)
                 svg = None
                 if ok and os.path.exists(output_path):
                     with open(output_path, 'r', encoding='utf-8') as f:
@@ -72,10 +105,11 @@ def render_source(filename, content, layout_algorithm='select', view='auto',
                 elif ok:
                     ok = False
                     log_buffer.write('[ERROR] El motor no produjo el SVG\n')
+                fases = _recolectar_fases(tmp) if visualize_growth else []
         finally:
             root_logger.removeHandler(log_handler)
 
-    return bool(ok and svg), svg, log_buffer.getvalue()
+    return bool(ok and svg), svg, log_buffer.getvalue(), fases
 
 
 class VisorHandler(BaseHTTPRequestHandler):
@@ -117,14 +151,16 @@ class VisorHandler(BaseHTTPRequestHandler):
                        'application/json')
             return
 
-        ok, svg, log = render_source(
+        ok, svg, log, fases = render_source(
             filename, content,
             layout_algorithm=options.get('layout_algorithm', 'select'),
             view=options.get('view', 'auto'),
             visualdebug=bool(options.get('visualdebug', False)),
+            visualize_growth=bool(options.get('visualize_growth', False)),
         )
         self._send(HTTPStatus.OK,
-                   json.dumps({'ok': ok, 'svg': svg, 'log': log}),
+                   json.dumps({'ok': ok, 'svg': svg, 'log': log,
+                               'phases': fases}),
                    'application/json')
 
 
