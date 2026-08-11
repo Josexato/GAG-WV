@@ -51,6 +51,12 @@ python -m gagwv --no-browser      # no abrir el navegador
   mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
+- **Clic en el SVG → parte del JSON**: haz clic en un nodo, contenedor,
+  etiqueta o conexión del diagrama y el editor selecciona y hace scroll al
+  objeto JSON que lo definió (prefiriendo la definición en `elements` sobre
+  referencias en `contains`/`journeys`), con un resaltado azul sobre la
+  figura y un chip que dice qué se encontró. Las conexiones tienen una zona
+  de clic ancha invisible para no tener que acertarle a la línea de 2px.
 - **Aviso de motor desactualizado**: al abrir el visor compara tu AlmaGag
   local contra `master` en GitHub (commit git si es un clon; versión de
   `pyproject.toml` si fue `pip install`) y muestra un banner con cuántos

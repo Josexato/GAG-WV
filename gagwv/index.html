@@ -166,6 +166,17 @@
   }
   #lienzo { padding: 20px; display: inline-block; }
   #lienzo svg { display: block; background: white; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
+  #lienzo [id], #lienzo .ag-container, #lienzo text, #lienzo polyline { cursor: pointer; }
+  #lienzo .sel-resaltado { filter: drop-shadow(0 0 4px #2563eb) drop-shadow(0 0 8px #2563eb88); }
+  #chip-sel {
+    font-size: 11.5px;
+    color: var(--acento);
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 2px 8px;
+    display: none;
+  }
   #vacio {
     color: #9ca3af;
     font-size: 14px;
@@ -213,6 +224,7 @@
       <input type="file" id="selector-archivo" accept=".sdjf,.gag,.json">
       <button class="primario" id="btn-render">▶ Renderizar</button>
       <span class="atajo">Ctrl+Enter · o arrastra el archivo al editor</span>
+      <span id="chip-sel"></span>
     </div>
     <textarea id="editor" spellcheck="false"
       placeholder='Pega aquí el contenido del .sdjf/.gag, o arrastra el archivo…'></textarea>
@@ -397,6 +409,19 @@
     vacio.hidden = true;
     lienzo.hidden = false;
     $('btn-descargar').disabled = false;
+    // Zona de clic ancha e invisible sobre cada conexión (2px es muy fino)
+    svgActual.querySelectorAll('polyline[marker-end], polyline[marker-start]')
+      .forEach((pl, i) => {
+        pl.dataset.connIdx = i;
+        const hit = pl.cloneNode(false);
+        hit.removeAttribute('marker-end');
+        hit.removeAttribute('marker-start');
+        hit.setAttribute('stroke', 'transparent');
+        hit.setAttribute('stroke-width', '12');
+        hit.setAttribute('fill', 'none');
+        hit.dataset.connIdx = i;
+        pl.after(hit);
+      });
     aplicarZoom(zoom);
   }
 
@@ -422,6 +447,148 @@
     e.preventDefault();
     aplicarZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
   }, { passive: false });
+
+  // ---------- clic en el SVG → parte del JSON que lo definió ----------
+  // Los <g id="..."> del SVG llevan el id del elemento del JSON (los iconos
+  // de contenedor con sufijo _icon); las etiquetas y conexiones se mapean
+  // por texto y por orden. Todo son heurísticas de lectura: nunca editan.
+
+  function rangoObjetoEn(texto, pos) {
+    // Rango [ini, fin) del objeto {...} más interno que contiene pos,
+    // respetando strings y escapes del JSON.
+    const pila = [];
+    let enStr = false, esc = false;
+    for (let i = 0; i < texto.length; i++) {
+      const c = texto[i];
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = enStr; continue; }
+      if (c === '"') { enStr = !enStr; continue; }
+      if (enStr) continue;
+      if (c === '{') pila.push(i);
+      else if (c === '}') {
+        const ini = pila.pop();
+        if (ini !== undefined && ini <= pos && pos <= i) return [ini, i + 1];
+      }
+    }
+    return null;
+  }
+
+  const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  function rangoPorId(id) {
+    // Un id puede aparecer como DEFINICIÓN (en elements, con label/type…)
+    // o como referencia (en contains, journeys…). Preferir la definición.
+    const re = new RegExp('"id"\\s*:\\s*"' + escRe(id) + '"', 'g');
+    let m, primero = null;
+    while ((m = re.exec(editor.value))) {
+      const r = rangoObjetoEn(editor.value, m.index);
+      if (!r) continue;
+      if (!primero) primero = r;
+      const cuerpo = editor.value.slice(r[0], r[1]);
+      if (/"(label|type|color|contains)"\s*:/.test(cuerpo)) return r;
+    }
+    return primero;
+  }
+
+  function rangoConexion(from, to) {
+    const re = new RegExp('"from"\\s*:\\s*"' + escRe(from) + '"', 'g');
+    const reTo = new RegExp('"to"\\s*:\\s*"' + escRe(to) + '"');
+    let m;
+    while ((m = re.exec(editor.value))) {
+      const r = rangoObjetoEn(editor.value, m.index);
+      if (r && reTo.test(editor.value.slice(r[0], r[1]))) return r;
+    }
+    return null;
+  }
+
+  function seleccionarRango(r, descripcion, nodoSvg) {
+    if (!r) { mostrarChip(descripcion + ' — no encontrado en el JSON'); return; }
+    editor.focus();
+    editor.setSelectionRange(r[0], r[1]);
+    const linea = editor.value.slice(0, r[0]).split('\n').length - 1;
+    const lh = parseFloat(getComputedStyle(editor).lineHeight) || 18;
+    editor.scrollTop = Math.max(0, linea * lh - editor.clientHeight / 3);
+    mostrarChip(descripcion);
+    resaltarNodo(nodoSvg);
+  }
+
+  let chipTimer = null;
+  function mostrarChip(texto) {
+    const chip = $('chip-sel');
+    chip.textContent = '🔎 ' + texto;
+    chip.style.display = 'inline-block';
+    clearTimeout(chipTimer);
+    chipTimer = setTimeout(() => chip.style.display = 'none', 6000);
+  }
+
+  function resaltarNodo(n) {
+    lienzo.querySelectorAll('.sel-resaltado')
+      .forEach(x => x.classList.remove('sel-resaltado'));
+    if (n && n.classList) n.classList.add('sel-resaltado');
+  }
+
+  function jsonActual() {
+    try { return JSON.parse(editor.value); } catch { return null; }
+  }
+
+  function irPorTexto(lineaClic) {
+    const data = jsonActual();
+    if (!data) return false;
+    const coincide = obj => (obj.label || '').split('\n')
+      .some(l => l.trim() === lineaClic);
+    const el = (data.elements || []).find(coincide);
+    if (el && el.id) return { r: rangoPorId(el.id), desc: `elemento "${el.id}"` };
+    const conn = (data.connections || []).find(coincide);
+    if (conn) return { r: rangoConexion(conn.from, conn.to),
+                       desc: `conexión ${conn.from} → ${conn.to}` };
+    return false;
+  }
+
+  function irPorPolyline(poly, svg) {
+    const data = jsonActual();
+    if (!data || !Array.isArray(data.connections)) return false;
+    const originales = Array.from(
+      svg.querySelectorAll('polyline[marker-end], polyline[marker-start]'));
+    // Sólo confiable si hay una polilínea por conexión (mismo orden de dibujo)
+    if (originales.length !== data.connections.length) return false;
+    const idx = parseInt(poly.dataset.connIdx ?? '-1', 10);
+    if (idx < 0 || idx >= data.connections.length) return false;
+    const c = data.connections[idx];
+    return { r: rangoConexion(c.from, c.to),
+             desc: `conexión ${c.from} → ${c.to}`,
+             nodo: originales[idx] };
+  }
+
+  const ID_INTERNO = /^(gradient-|arrow-|circle-|text-glow)/;
+
+  lienzo.addEventListener('click', e => {
+    let n = e.target, textoClic = null, poly = null;
+    while (n && n !== lienzo) {
+      if (n.tagName === 'text' && textoClic === null)
+        textoClic = (n.textContent || '').trim();
+      if (n.tagName === 'polyline' && !poly) poly = n;
+      if (n.id && !ID_INTERNO.test(n.id)) {
+        const id = n.id.replace(/_icon$/, '');
+        seleccionarRango(rangoPorId(id), `elemento "${id}"`, n);
+        return;
+      }
+      if (n.classList && n.classList.contains('ag-container')) {
+        // El rect del contenedor no lleva id; su icono <g id="X_icon"> sí,
+        // y el motor lo dibuja como hermano inmediato siguiente.
+        const sib = n.nextElementSibling;
+        if (sib && sib.id && !ID_INTERNO.test(sib.id)) {
+          const id = sib.id.replace(/_icon$/, '');
+          seleccionarRango(rangoPorId(id), `contenedor "${id}"`, n);
+          return;
+        }
+      }
+      n = n.parentNode;
+    }
+    let res = textoClic ? irPorTexto(textoClic) : false;
+    if (!res && poly) res = irPorPolyline(poly, svgActual);
+    if (res) seleccionarRango(res.r, res.desc, res.nodo || poly || e.target);
+    else resaltarNodo(null);   // clic en el fondo: limpiar resaltado
+  });
 
   // ---------- descarga ----------
   $('btn-descargar').addEventListener('click', () => {
