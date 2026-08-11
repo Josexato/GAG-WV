@@ -263,12 +263,16 @@
 
   <section id="panel-der">
     <div id="barra-zoom">
+      <button id="btn-json" title="Ocultar/mostrar el editor JSON">◀ JSON</button>
       <button id="zoom-menos" title="Alejar">−</button>
       <span id="zoom-nivel">100%</span>
       <button id="zoom-mas" title="Acercar">+</button>
       <button id="zoom-cien" title="Tamaño real">1:1</button>
       <button id="zoom-ajustar" title="Ajustar al ancho">Ajustar</button>
       <span style="flex:1"></span>
+      <button id="btn-exportar" disabled
+        title="ZIP con el JSON fuente + SVG (+ fases si hay) para enviarlo a un análisis de diseño">
+        📦 Exportar análisis</button>
       <button id="btn-descargar" disabled>⬇ Descargar SVG</button>
     </div>
     <div id="pestanas" hidden></div>
@@ -474,6 +478,7 @@
     vacio.hidden = true;
     lienzo.hidden = false;
     $('btn-descargar').disabled = false;
+    $('btn-exportar').disabled = false;
     // Zona de clic ancha e invisible sobre cada conexión (2px es muy fino)
     svgActual.querySelectorAll('polyline[marker-end], polyline[marker-start]')
       .forEach((pl, i) => {
@@ -649,6 +654,47 @@
     if (!res && poly) res = irPorPolyline(poly, svgActual);
     if (res) seleccionarRango(res.r, res.desc, res.nodo || poly || e.target);
     else resaltarNodo(null);   // clic en el fondo: limpiar resaltado
+  });
+
+  // ---------- ocultar/mostrar el editor JSON ----------
+  $('btn-json').addEventListener('click', () => {
+    const panel = document.getElementById('panel-izq');
+    const oculto = panel.style.display === 'none';
+    panel.style.display = oculto ? 'flex' : 'none';
+    $('btn-json').textContent = oculto ? '◀ JSON' : '▶ JSON';
+    if (oculto) cm.refresh();   // CodeMirror re-mide al volver a mostrarse
+  });
+
+  // ---------- exportar ZIP para análisis ----------
+  $('btn-exportar').addEventListener('click', async () => {
+    if (!svgFinal) return;
+    const btn = $('btn-exportar');
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: nombreArchivo,
+          json: editor.value,
+          svg: svgFinal,
+          fases: fases,
+        }),
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const disp = resp.headers.get('Content-Disposition') || '';
+      const m = /filename="([^"]+)"/.exec(disp);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = m ? m[1] : 'analisis.zip';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      mostrarLog('[ERROR] No se pudo exportar: ' + err);
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // ---------- descarga ----------

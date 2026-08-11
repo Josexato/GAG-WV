@@ -51,6 +51,12 @@ python -m gagwv --no-browser      # no abrir el navegador
   mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
+- **Exportar para análisis**: el botón *📦 Exportar análisis* descarga un
+  ZIP con la fuente `.sdjf`/`.gag`, el SVG renderizado, las fases de la
+  Epifanía (si están activas) y un `INFO.txt` de contexto — listo para
+  adjuntarlo a un análisis de diseño (p. ej. una conversación con Claude).
+- **Ocultar el editor**: el botón *◀ JSON* colapsa el panel izquierdo para
+  ver el diagrama a pantalla completa; *▶ JSON* lo trae de vuelta.
 - **Editor con plegado**: el JSON se puede colapsar por llaves (flechitas en
   el margen, CodeMirror vendoreado — sigue sin necesitar internet), con
   números de línea, sintaxis coloreada y botones *Colapsar* / *Expandir*

@@ -64,3 +64,47 @@ def test_extension_desconocida_404():
         status, _ = _get(puerto, '/static/codemirror/LICENSE-NOTICE.md')
         assert status == 404
     _con_servidor(caso)
+
+
+def test_exportar_zip():
+    import io
+    import json
+    import zipfile
+
+    def caso(puerto):
+        cuerpo = json.dumps({
+            'filename': 'mi-diagrama.sdjf',
+            'json': '{"elements": []}',
+            'svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+            'fases': [{'label': '01', 'svg': '<svg/>'}],
+        })
+        conn = http.client.HTTPConnection('127.0.0.1', puerto, timeout=10)
+        conn.request('POST', '/exportar', body=cuerpo,
+                     headers={'Content-Type': 'application/json'})
+        resp = conn.getresponse()
+        datos = resp.read()
+        assert resp.status == 200
+        assert resp.getheader('Content-Type') == 'application/zip'
+        assert 'mi-diagrama_analisis_' in (
+            resp.getheader('Content-Disposition') or '')
+        conn.close()
+        with zipfile.ZipFile(io.BytesIO(datos)) as z:
+            nombres = set(z.namelist())
+            assert {'mi-diagrama.sdjf', 'mi-diagrama.svg', 'INFO.txt',
+                    'epifania/01.svg'} == nombres
+            assert b'GAG-WV' in z.read('INFO.txt')
+    _con_servidor(caso)
+
+
+def test_exportar_sin_svg_es_400():
+    def caso(puerto):
+        import json
+        conn = http.client.HTTPConnection('127.0.0.1', puerto, timeout=10)
+        conn.request('POST', '/exportar',
+                     body=json.dumps({'json': '{}'}),
+                     headers={'Content-Type': 'application/json'})
+        resp = conn.getresponse()
+        resp.read()
+        assert resp.status == 400
+        conn.close()
+    _con_servidor(caso)

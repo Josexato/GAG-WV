@@ -5,6 +5,7 @@ renderizado llama a AlmaGag.generator.generate_diagram escribiendo el
 archivo de entrada y el SVG de salida en un directorio temporal.
 """
 
+import datetime
 import glob
 import io
 import json
@@ -12,6 +13,7 @@ import logging
 import os
 import tempfile
 import threading
+import zipfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -141,6 +143,67 @@ class VisorHandler(BaseHTTPRequestHandler):
         else:
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
 
+    def _exportar_zip(self):
+        """POST /exportar {filename, json, svg[, fases]} → ZIP para análisis.
+
+        Empaqueta la fuente .sdjf/.gag, el SVG final y un INFO.txt de
+        contexto, pensado para adjuntarlo a un análisis de diseño (p.ej.
+        una conversación con Claude)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            fuente = payload.get('json', '')
+            svg = payload.get('svg', '')
+            if not fuente or not svg:
+                raise ValueError('faltan json o svg')
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send(HTTPStatus.BAD_REQUEST, f'Petición inválida: {e}',
+                       'text/plain')
+            return
+
+        nombre = os.path.basename(payload.get('filename') or 'diagrama.sdjf')
+        base, ext = os.path.splitext(nombre)
+        if ext.lower() not in VALID_EXTENSIONS:
+            nombre, base = base + '.sdjf', base
+        ahora = datetime.datetime.now()
+
+        info = (
+            f"Paquete de análisis GAG-WV\n"
+            f"==========================\n"
+            f"Generado: {ahora:%Y-%m-%d %H:%M}\n"
+            f"Motor: AlmaGag (https://github.com/Josexato/AlmaGag)\n\n"
+            f"Contenido:\n"
+            f"  {nombre} — fuente declarativa (JSON sin coordenadas; el\n"
+            f"      motor decide el layout)\n"
+            f"  {base}.svg — SVG renderizado por el motor\n\n"
+            f"Contexto para el análisis de diseño: la fuente declara\n"
+            f"elementos, conexiones y recorridos (journeys); la geometría\n"
+            f"(posiciones, ruteo, tamaños) la produjo el motor. Comparar\n"
+            f"intención declarada vs resultado visual.\n"
+        )
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.writestr(nombre, fuente)
+            z.writestr(f'{base}.svg', svg)
+            for i, fase in enumerate(payload.get('fases') or [], 1):
+                if fase.get('svg'):
+                    z.writestr(f'epifania/{i:02d}.svg', fase['svg'])
+            if payload.get('fases'):
+                info += ("  epifania/NN.svg — fases del layout naciendo "
+                         "(flipbook)\n")
+            z.writestr('INFO.txt', info)
+        datos = buf.getvalue()
+
+        zip_nombre = f'{base}_analisis_{ahora:%Y%m%d-%H%M}.zip'
+        self.send_response(HTTPStatus.OK)
+        self.send_header('Content-Type', 'application/zip')
+        self.send_header('Content-Disposition',
+                         f'attachment; filename="{zip_nombre}"')
+        self.send_header('Content-Length', str(len(datos)))
+        self.end_headers()
+        self.wfile.write(datos)
+
     _MIME = {'.js': 'application/javascript', '.css': 'text/css',
              '.txt': 'text/plain'}
 
@@ -159,6 +222,9 @@ class VisorHandler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
 
     def do_POST(self):
+        if self.path == '/exportar':
+            self._exportar_zip()
+            return
         if self.path != '/render':
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
             return
