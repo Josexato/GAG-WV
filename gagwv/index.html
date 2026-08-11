@@ -348,6 +348,7 @@
   let nombreArchivo = 'diagrama.sdjf';
   let zoom = 1, naturalW = 0, naturalH = 0, svgActual = null, ultimoSvgTexto = '';
   let svgFinal = '', fases = [], pestanaActiva = -1;  // -1 = resultado final
+  let ultimoLog = '';   // warnings/errores del motor en el último render
 
   // ---------- aviso de motor desactualizado ----------
   (async function verificarMotor() {
@@ -436,8 +437,9 @@
   });
 
   function mostrarLog(texto) {
-    logEl.textContent = (texto || '').trim();
-    logEl.style.display = logEl.textContent ? 'block' : 'none';
+    ultimoLog = (texto || '').trim();
+    logEl.textContent = ultimoLog;
+    logEl.style.display = ultimoLog ? 'block' : 'none';
   }
 
   // ---------- pestañas (epifanía: fases del layout) ----------
@@ -683,6 +685,7 @@
           json: editor.value,
           svg: svgFinal,
           fases: fases,
+          log: ultimoLog,
         }),
       });
       if (!resp.ok) throw new Error(await resp.text());

@@ -58,7 +58,8 @@ python -m gagwv --no-browser      # no abrir el navegador
   de impresión para *Guardar como PDF* a mano.
 - **Exportar para análisis**: el botón *📦 Exportar análisis* descarga un
   ZIP con la fuente `.sdjf`/`.gag`, el SVG renderizado, las fases de la
-  Epifanía (si están activas) y un `INFO.txt` de contexto — listo para
+  Epifanía (si están activas), un `LOG.txt` con los diagnósticos del motor
+  en ese render (cruces, tinta, aspecto, bandas…) y un `INFO.txt` de contexto — listo para
   adjuntarlo a un análisis de diseño (p. ej. una conversación con Claude).
 - **Ocultar el editor**: el botón *◀ JSON* colapsa el panel izquierdo para
   ver el diagrama a pantalla completa; *▶ JSON* lo trae de vuelta.

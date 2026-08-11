@@ -77,6 +77,7 @@ def test_exportar_zip():
             'json': '{"elements": []}',
             'svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
             'fases': [{'label': '01', 'svg': '<svg/>'}],
+            'log': '[WARNING] [hier] cruces=247 tinta=6.2%',
         })
         conn = http.client.HTTPConnection('127.0.0.1', puerto, timeout=10)
         conn.request('POST', '/exportar', body=cuerpo,
@@ -91,8 +92,10 @@ def test_exportar_zip():
         with zipfile.ZipFile(io.BytesIO(datos)) as z:
             nombres = set(z.namelist())
             assert {'mi-diagrama.sdjf', 'mi-diagrama.svg', 'INFO.txt',
-                    'epifania/01.svg'} == nombres
+                    'epifania/01.svg', 'LOG.txt'} == nombres
             assert b'GAG-WV' in z.read('INFO.txt')
+            assert b'LOG.txt' in z.read('INFO.txt')
+            assert b'cruces=247' in z.read('LOG.txt')
     _con_servidor(caso)
 
 

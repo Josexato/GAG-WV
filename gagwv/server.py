@@ -182,6 +182,7 @@ class VisorHandler(BaseHTTPRequestHandler):
             f"intención declarada vs resultado visual.\n"
         )
 
+        log = (payload.get('log') or '').strip()
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
             z.writestr(nombre, fuente)
@@ -192,6 +193,12 @@ class VisorHandler(BaseHTTPRequestHandler):
             if payload.get('fases'):
                 info += ("  epifania/NN.svg — fases del layout naciendo "
                          "(flipbook)\n")
+            if log:
+                z.writestr('LOG.txt', log + '\n')
+                info += ("  LOG.txt — diagnósticos del motor en este render\n"
+                         "      (WARNING/ERROR: cruces, tinta, aspecto,\n"
+                         "      bandas, migraciones de formato…) — insumo\n"
+                         "      directo para el análisis de diseño\n")
             z.writestr('INFO.txt', info)
         datos = buf.getvalue()
 
