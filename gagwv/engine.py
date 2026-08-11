@@ -33,9 +33,17 @@ def cargar_generate_diagram():
         pass
     for ruta in _CANDIDATOS:
         # ALMAGAG_PATH puede apuntar al repo (contiene AlmaGag/) o al paquete.
-        for base in (ruta, os.path.dirname(ruta)):
-            if os.path.isdir(os.path.join(base, 'AlmaGag')) and base not in sys.path:
-                sys.path.insert(0, base)
+        # Insertar UNA sola base: dos bases convierten a AlmaGag en namespace
+        # package con rutas duplicadas y rompen la detección de versión.
+        ruta = os.path.abspath(ruta)
+        if os.path.isdir(os.path.join(ruta, 'AlmaGag')):
+            base = ruta
+        elif os.path.basename(ruta) == 'AlmaGag' and os.path.isdir(ruta):
+            base = os.path.dirname(ruta)
+        else:
+            continue
+        if base not in sys.path:
+            sys.path.insert(0, base)
         try:
             return importlib.import_module('AlmaGag.generator').generate_diagram
         except ImportError:

@@ -51,6 +51,12 @@ python -m gagwv --no-browser      # no abrir el navegador
   mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
+- **Aviso de motor desactualizado**: al abrir el visor compara tu AlmaGag
+  local contra `master` en GitHub (commit git si es un clon; versión de
+  `pyproject.toml` si fue `pip install`) y muestra un banner con cuántos
+  commits estás atrás y el comando exacto para actualizar. Sin conexión o
+  sin git el aviso simplemente no aparece — nada se bloquea. Se re-verifica
+  como mucho una vez por hora.
 
 El render usa exactamente el mismo `generate_diagram` que el CLI de AlmaGag,
 así que el resultado es idéntico a `python -m AlmaGag.main archivo.sdjf`.

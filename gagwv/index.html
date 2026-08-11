@@ -34,6 +34,31 @@
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   header h1 span { color: var(--acento); }
   header .archivo { font-size: 12px; color: #6b7280; }
+  #aviso-motor {
+    display: none;
+    padding: 7px 14px;
+    background: #fef3c7;
+    border-bottom: 1px solid #f59e0b;
+    color: #78350f;
+    font-size: 12.5px;
+    align-items: center;
+    gap: 10px;
+  }
+  #aviso-motor code {
+    background: #fde68a;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace;
+    user-select: all;
+  }
+  #aviso-motor button {
+    margin-left: auto;
+    border: none;
+    background: none;
+    color: #78350f;
+    font-size: 15px;
+    padding: 0 4px;
+  }
   main {
     flex: 1;
     display: flex;
@@ -175,6 +200,12 @@
   <span class="archivo" id="nombre-archivo">sin archivo — carga un .sdjf o .gag, o pega el JSON</span>
 </header>
 
+<div id="aviso-motor">
+  <span>⚠</span>
+  <span id="aviso-motor-texto"></span>
+  <button id="aviso-motor-cerrar" title="Ocultar">✕</button>
+</div>
+
 <main>
   <section id="panel-izq">
     <div id="barra-carga">
@@ -236,6 +267,26 @@
   let nombreArchivo = 'diagrama.sdjf';
   let zoom = 1, naturalW = 0, naturalH = 0, svgActual = null, ultimoSvgTexto = '';
   let svgFinal = '', fases = [], pestanaActiva = -1;  // -1 = resultado final
+
+  // ---------- aviso de motor desactualizado ----------
+  (async function verificarMotor() {
+    try {
+      const r = await fetch('/estado-motor');
+      const e = await r.json();
+      if (e.status !== 'outdated') return;   // ok/unknown: silencio
+      const cont = $('aviso-motor-texto');
+      cont.textContent = 'Tu motor AlmaGag está desactualizado: ' + e.detalle + '. ';
+      if (e.como_actualizar) {
+        cont.appendChild(document.createTextNode('Actualiza con '));
+        const code = document.createElement('code');
+        code.textContent = e.como_actualizar;
+        cont.appendChild(code);
+      }
+      $('aviso-motor').style.display = 'flex';
+    } catch (err) { /* sin servidor o sin red: silencio */ }
+  })();
+  $('aviso-motor-cerrar').addEventListener('click',
+    () => $('aviso-motor').style.display = 'none');
 
   // ---------- carga de archivo ----------
   function cargarArchivo(file) {

@@ -132,6 +132,10 @@ class VisorHandler(BaseHTTPRequestHandler):
             index = os.path.join(STATIC_DIR, 'index.html')
             with open(index, 'r', encoding='utf-8') as f:
                 self._send(HTTPStatus.OK, f.read(), 'text/html')
+        elif self.path == '/estado-motor':
+            from gagwv.actualizacion import estado_motor
+            self._send(HTTPStatus.OK, json.dumps(estado_motor()),
+                       'application/json')
         else:
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
 
