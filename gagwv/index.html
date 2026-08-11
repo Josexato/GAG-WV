@@ -36,6 +36,18 @@
   header h1 { font-size: 15px; margin: 0; font-weight: 600; }
   header h1 span { color: var(--acento); }
   header .archivo { font-size: 12px; color: #6b7280; }
+  #nombre-archivo {
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--tinta);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 2px 6px;
+    width: 240px;
+    background: transparent;
+  }
+  #nombre-archivo:hover { border-color: var(--borde); }
+  #nombre-archivo:focus { border-color: var(--acento); outline: none; background: white; }
   #aviso-motor {
     display: none;
     padding: 7px 14px;
@@ -213,7 +225,9 @@
 
 <header>
   <h1>GAG<span>-WV</span> · visor AlmaGag</h1>
-  <span class="archivo" id="nombre-archivo">sin archivo — carga un .sdjf o .gag, o pega el JSON</span>
+  <input id="nombre-archivo" placeholder="diagrama.sdjf" spellcheck="false"
+    title="Nombre del archivo — se usa en las descargas y en el paquete de análisis; editable si pegaste el JSON a mano">
+  <span class="archivo">carga un .sdjf o .gag, arrastra, o pega el JSON</span>
 </header>
 
 <div id="aviso-motor">
@@ -344,8 +358,11 @@
   }
   $('btn-colapsar').addEventListener('click', plegarTodo);
   $('btn-expandir').addEventListener('click', expandirTodo);
-  const nombreEl = $('nombre-archivo'), logEl = $('log');
-  let nombreArchivo = 'diagrama.sdjf';
+  const logEl = $('log');
+  // El nombre vive en el input del encabezado: se llena al cargar archivo
+  // y es editable a mano cuando el JSON se pegó directo.
+  const leerNombre = () =>
+    ($('nombre-archivo').value || '').trim() || 'diagrama.sdjf';
   let zoom = 1, naturalW = 0, naturalH = 0, svgActual = null, ultimoSvgTexto = '';
   let svgFinal = '', fases = [], pestanaActiva = -1;  // -1 = resultado final
   let ultimoLog = '';   // warnings/errores del motor en el último render
@@ -376,8 +393,7 @@
     const reader = new FileReader();
     reader.onload = () => {
       editor.value = reader.result;
-      nombreArchivo = file.name;
-      nombreEl.textContent = file.name;
+      $('nombre-archivo').value = file.name;
       renderizar();
     };
     reader.readAsText(file, 'utf-8');
@@ -404,7 +420,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filename: nombreArchivo,
+          filename: leerNombre(),
           content: contenido,
           options: {
             layout_algorithm: $('opt-layout').value,
@@ -681,7 +697,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filename: nombreArchivo,
+          filename: leerNombre(),
           json: editor.value,
           svg: svgFinal,
           fases: fases,
@@ -708,7 +724,7 @@
   function nombreBase() {
     const sufijo = pestanaActiva >= 0
       ? '_fase-' + String(pestanaActiva + 1).padStart(2, '0') : '';
-    return nombreArchivo.replace(/\.(sdjf|gag|json)$/i, '') + sufijo;
+    return leerNombre().replace(/\.(sdjf|gag|json)$/i, '') + sufijo;
   }
 
   function imprimirComoRespaldo() {
