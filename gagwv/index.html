@@ -273,6 +273,9 @@
       <button id="btn-exportar" disabled
         title="ZIP con el JSON fuente + SVG (+ fases si hay) para enviarlo a un análisis de diseño">
         📦 Exportar análisis</button>
+      <button id="btn-pdf" disabled
+        title="PDF vectorial de la pestaña visible (Chrome/Edge headless; sin navegador, abre el diálogo de impresión)">
+        🖨 PDF</button>
       <button id="btn-descargar" disabled>⬇ Descargar SVG</button>
     </div>
     <div id="pestanas" hidden></div>
@@ -479,6 +482,7 @@
     lienzo.hidden = false;
     $('btn-descargar').disabled = false;
     $('btn-exportar').disabled = false;
+    $('btn-pdf').disabled = false;
     // Zona de clic ancha e invisible sobre cada conexión (2px es muy fino)
     svgActual.querySelectorAll('polyline[marker-end], polyline[marker-start]')
       .forEach((pl, i) => {
@@ -697,15 +701,59 @@
     }
   });
 
+  // ---------- exportar PDF (de la pestaña visible) ----------
+  function nombreBase() {
+    const sufijo = pestanaActiva >= 0
+      ? '_fase-' + String(pestanaActiva + 1).padStart(2, '0') : '';
+    return nombreArchivo.replace(/\.(sdjf|gag|json)$/i, '') + sufijo;
+  }
+
+  function imprimirComoRespaldo() {
+    // Sin Chrome/Edge en el sistema: vista limpia + diálogo de impresión,
+    // donde el usuario elige "Guardar como PDF".
+    const v = window.open('', '_blank');
+    if (!v) { mostrarLog('[ERROR] El navegador bloqueó la ventana de impresión.'); return; }
+    v.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'
+      + nombreBase() + '</title><style>html,body{margin:0}svg{display:block;'
+      + 'max-width:100%;height:auto}</style></head><body>'
+      + ultimoSvgTexto + '</body></html>');
+    v.document.close();
+    v.focus();
+    setTimeout(() => v.print(), 300);
+  }
+
+  $('btn-pdf').addEventListener('click', async () => {
+    if (!ultimoSvgTexto) return;
+    const btn = $('btn-pdf');
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/exportar-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: nombreBase(), svg: ultimoSvgTexto }),
+      });
+      if (resp.status === 501) { imprimirComoRespaldo(); return; }
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = nombreBase() + '.pdf';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      mostrarLog('[ERROR] No se pudo exportar a PDF: ' + err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // ---------- descarga ----------
   $('btn-descargar').addEventListener('click', () => {
     if (!ultimoSvgTexto) return;
     const blob = new Blob([ultimoSvgTexto], { type: 'image/svg+xml' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    const sufijo = pestanaActiva >= 0
-      ? '_fase-' + String(pestanaActiva + 1).padStart(2, '0') : '';
-    a.download = nombreArchivo.replace(/\.(sdjf|gag|json)$/i, '') + sufijo + '.svg';
+    a.download = nombreBase() + '.svg';
     a.click();
     URL.revokeObjectURL(a.href);
   });

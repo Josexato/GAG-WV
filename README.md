@@ -51,6 +51,11 @@ python -m gagwv --no-browser      # no abrir el navegador
   mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
+- **Exportar a PDF**: el botón *🖨 PDF* genera un PDF vectorial de la
+  pestaña visible al tamaño exacto del diagrama, usando el Chrome/Edge ya
+  instalado en modo headless (mismo detector §O58 del motor, incluida la
+  variable `ALMAGAG_CHROME`). Si no hay navegador compatible, abre la vista
+  de impresión para *Guardar como PDF* a mano.
 - **Exportar para análisis**: el botón *📦 Exportar análisis* descarga un
   ZIP con la fuente `.sdjf`/`.gag`, el SVG renderizado, las fases de la
   Epifanía (si están activas) y un `INFO.txt` de contexto — listo para

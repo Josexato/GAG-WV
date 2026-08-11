@@ -96,6 +96,31 @@ def test_exportar_zip():
     _con_servidor(caso)
 
 
+def test_exportar_pdf():
+    import json
+
+    from gagwv.pdf import buscar_chrome
+    import pytest
+    if not buscar_chrome():
+        pytest.skip('sin Chrome/Chromium en este entorno')
+
+    def caso(puerto):
+        svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="200" '
+               'height="100"><rect width="200" height="100" fill="red"/></svg>')
+        conn = http.client.HTTPConnection('127.0.0.1', puerto, timeout=90)
+        conn.request('POST', '/exportar-pdf',
+                     body=json.dumps({'filename': 'demo.sdjf', 'svg': svg}),
+                     headers={'Content-Type': 'application/json'})
+        resp = conn.getresponse()
+        datos = resp.read()
+        conn.close()
+        assert resp.status == 200
+        assert resp.getheader('Content-Type') == 'application/pdf'
+        assert 'demo.pdf' in (resp.getheader('Content-Disposition') or '')
+        assert datos.startswith(b'%PDF')
+    _con_servidor(caso)
+
+
 def test_exportar_sin_svg_es_400():
     def caso(puerto):
         import json

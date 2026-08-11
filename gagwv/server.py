@@ -204,6 +204,39 @@ class VisorHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(datos)
 
+    def _exportar_pdf(self):
+        """POST /exportar-pdf {filename, svg} → PDF vectorial vía Chrome
+        headless. 501 si no hay navegador (la UI cae al diálogo de
+        impresión)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            svg = payload.get('svg', '')
+            if not svg:
+                raise ValueError('falta svg')
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send(HTTPStatus.BAD_REQUEST, f'Petición inválida: {e}',
+                       'text/plain')
+            return
+
+        from gagwv.pdf import svg_a_pdf
+        datos = svg_a_pdf(svg)
+        if datos is None:
+            self._send(HTTPStatus.NOT_IMPLEMENTED,
+                       'Sin Chrome/Edge disponible para convertir a PDF',
+                       'text/plain')
+            return
+
+        base = os.path.splitext(
+            os.path.basename(payload.get('filename') or 'diagrama'))[0]
+        self.send_response(HTTPStatus.OK)
+        self.send_header('Content-Type', 'application/pdf')
+        self.send_header('Content-Disposition',
+                         f'attachment; filename="{base}.pdf"')
+        self.send_header('Content-Length', str(len(datos)))
+        self.end_headers()
+        self.wfile.write(datos)
+
     _MIME = {'.js': 'application/javascript', '.css': 'text/css',
              '.txt': 'text/plain'}
 
@@ -224,6 +257,9 @@ class VisorHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/exportar':
             self._exportar_zip()
+            return
+        if self.path == '/exportar-pdf':
+            self._exportar_pdf()
             return
         if self.path != '/render':
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
