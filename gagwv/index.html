@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <title>GAG-WV — Visor AlmaGag</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/codemirror/codemirror.min.css">
+<link rel="stylesheet" href="/static/codemirror/foldgutter.min.css">
 <style>
   :root {
     --borde: #d0d4dc;
@@ -81,20 +83,23 @@
     flex-wrap: wrap;
     border-bottom: 1px solid var(--borde);
   }
-  #editor {
-    flex: 1;
-    resize: none;
-    border: none;
-    outline: none;
-    padding: 10px;
+  #editor { display: none; }   /* textarea semilla de CodeMirror */
+  #panel-izq .CodeMirror {
+    flex: 1 1 0;
+    height: auto;
+    min-height: 0;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
     font-size: 12.5px;
     line-height: 1.45;
-    white-space: pre;
-    overflow: auto;
-    tab-size: 2;
   }
-  #editor.arrastrando { outline: 2px dashed var(--acento); outline-offset: -6px; }
+  #panel-izq .CodeMirror.arrastrando { outline: 2px dashed var(--acento); outline-offset: -4px; }
+  .CodeMirror-foldmarker {
+    color: var(--acento);
+    font-family: inherit;
+    text-shadow: none;
+    cursor: pointer;
+    padding: 0 4px;
+  }
   #barra-opciones {
     padding: 6px 10px;
     display: flex;
@@ -250,6 +255,9 @@
       <label><input type="checkbox" id="opt-visualdebug"> visualdebug</label>
       <label title="Un SVG por fase del layout naciendo — se ven como pestañas sobre el visor">
         <input type="checkbox" id="opt-epifania"> epifanía (fases)</label>
+      <span style="flex:1"></span>
+      <button id="btn-colapsar" title="Colapsar todos los objetos">⊟ Colapsar</button>
+      <button id="btn-expandir" title="Expandir todo">⊞ Expandir</button>
     </div>
   </section>
 
@@ -271,10 +279,64 @@
   </section>
 </main>
 
+<script src="/static/codemirror/codemirror.min.js"></script>
+<script src="/static/codemirror/javascript.min.js"></script>
+<script src="/static/codemirror/foldcode.min.js"></script>
+<script src="/static/codemirror/foldgutter.min.js"></script>
+<script src="/static/codemirror/brace-fold.min.js"></script>
 <script>
 (function () {
   const $ = id => document.getElementById(id);
-  const editor = $('editor'), lienzo = $('lienzo'), vacio = $('vacio');
+  const lienzo = $('lienzo'), vacio = $('vacio');
+
+  // Editor CodeMirror sobre el textarea #editor: plegado por llaves
+  // (flechitas del margen), números de línea y sintaxis JSON.
+  const cm = CodeMirror.fromTextArea($('editor'), {
+    mode: { name: 'javascript', json: true },
+    lineNumbers: true,
+    foldGutter: true,
+    gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+    tabSize: 2,
+    indentUnit: 2,
+    lineWrapping: false,
+    extraKeys: {
+      'Ctrl-Enter': () => renderizar(),
+      'Cmd-Enter': () => renderizar(),
+      'Ctrl-Q': c => c.foldCode(c.getCursor()),
+    },
+  });
+  // Adaptador con la interfaz que usa el resto del código (value,
+  // selección por índice absoluto, scroll), desplegando lo necesario.
+  const editor = {
+    get value() { return cm.getValue(); },
+    set value(t) { cm.setValue(t); },
+    seleccionar(ini, fin) {
+      const a = cm.posFromIndex(ini), b = cm.posFromIndex(fin);
+      // Limpiar pliegues que contengan los extremos O se superpongan al
+      // rango (el objeto seleccionado podría estar él mismo colapsado).
+      cm.findMarksAt(a).concat(cm.findMarksAt(b), cm.findMarks(a, b))
+        .forEach(m => { if (m.__isFold) m.clear(); });
+      cm.focus();
+      cm.setSelection(a, b);
+      cm.scrollIntoView({ from: a, to: b }, 80);
+    },
+  };
+
+  function plegarTodo() {
+    // Plegar cada objeto/arreglo de segundo nivel (hijos de la raíz quedan
+    // visibles como {…} de una línea); la raíz nunca se pliega.
+    cm.operation(() => {
+      for (let l = cm.firstLine() + 1; l <= cm.lastLine(); l++)
+        cm.foldCode(CodeMirror.Pos(l, 0), null, 'fold');
+    });
+  }
+  function expandirTodo() {
+    cm.operation(() => {
+      cm.getAllMarks().forEach(m => { if (m.__isFold) m.clear(); });
+    });
+  }
+  $('btn-colapsar').addEventListener('click', plegarTodo);
+  $('btn-expandir').addEventListener('click', expandirTodo);
   const nombreEl = $('nombre-archivo'), logEl = $('log');
   let nombreArchivo = 'diagrama.sdjf';
   let zoom = 1, naturalW = 0, naturalH = 0, svgActual = null, ultimoSvgTexto = '';
@@ -313,13 +375,15 @@
     reader.readAsText(file, 'utf-8');
   }
   $('selector-archivo').addEventListener('change', e => cargarArchivo(e.target.files[0]));
-  editor.addEventListener('dragover', e => { e.preventDefault(); editor.classList.add('arrastrando'); });
-  editor.addEventListener('dragleave', () => editor.classList.remove('arrastrando'));
-  editor.addEventListener('drop', e => {
+  const zonaEditor = cm.getWrapperElement();
+  zonaEditor.addEventListener('dragover', e => { e.preventDefault(); zonaEditor.classList.add('arrastrando'); });
+  zonaEditor.addEventListener('dragleave', () => zonaEditor.classList.remove('arrastrando'));
+  zonaEditor.addEventListener('drop', e => {
     e.preventDefault();
-    editor.classList.remove('arrastrando');
+    e.stopPropagation();   // que CodeMirror no inserte el archivo como texto
+    zonaEditor.classList.remove('arrastrando');
     cargarArchivo(e.dataTransfer.files[0]);
-  });
+  }, true);
 
   // ---------- render ----------
   async function renderizar() {
@@ -360,6 +424,7 @@
   }
   $('btn-render').addEventListener('click', renderizar);
   document.addEventListener('keydown', e => {
+    if (e.defaultPrevented) return;   // CodeMirror ya lo manejó (extraKeys)
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); renderizar(); }
   });
 
@@ -503,11 +568,7 @@
 
   function seleccionarRango(r, descripcion, nodoSvg) {
     if (!r) { mostrarChip(descripcion + ' — no encontrado en el JSON'); return; }
-    editor.focus();
-    editor.setSelectionRange(r[0], r[1]);
-    const linea = editor.value.slice(0, r[0]).split('\n').length - 1;
-    const lh = parseFloat(getComputedStyle(editor).lineHeight) || 18;
-    editor.scrollTop = Math.max(0, linea * lh - editor.clientHeight / 3);
+    editor.seleccionar(r[0], r[1]);   // despliega si estaba colapsado
     mostrarChip(descripcion);
     resaltarNodo(nodoSvg);
   }

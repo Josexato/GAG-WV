@@ -136,7 +136,26 @@ class VisorHandler(BaseHTTPRequestHandler):
             from gagwv.actualizacion import estado_motor
             self._send(HTTPStatus.OK, json.dumps(estado_motor()),
                        'application/json')
+        elif self.path.startswith('/static/'):
+            self._servir_estatico(self.path[len('/static/'):])
         else:
+            self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
+
+    _MIME = {'.js': 'application/javascript', '.css': 'text/css',
+             '.txt': 'text/plain'}
+
+    def _servir_estatico(self, relativo):
+        base = os.path.join(STATIC_DIR, 'static')
+        destino = os.path.normpath(os.path.join(base, relativo))
+        ext = os.path.splitext(destino)[1].lower()
+        # Anti path-traversal + solo extensiones conocidas
+        if not destino.startswith(base + os.sep) or ext not in self._MIME:
+            self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
+            return
+        try:
+            with open(destino, 'r', encoding='utf-8') as f:
+                self._send(HTTPStatus.OK, f.read(), self._MIME[ext])
+        except OSError:
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
 
     def do_POST(self):

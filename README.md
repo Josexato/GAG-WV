@@ -51,6 +51,10 @@ python -m gagwv --no-browser      # no abrir el navegador
   mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
+- **Editor con plegado**: el JSON se puede colapsar por llaves (flechitas en
+  el margen, CodeMirror vendoreado — sigue sin necesitar internet), con
+  números de línea, sintaxis coloreada y botones *Colapsar* / *Expandir*
+  todo. El clic en el SVG despliega automáticamente lo que estaba colapsado.
 - **Clic en el SVG → parte del JSON**: haz clic en un nodo, contenedor,
   etiqueta o conexión del diagrama y el editor selecciona y hace scroll al
   objeto JSON que lo definió (prefiriendo la definición en `elements` sobre

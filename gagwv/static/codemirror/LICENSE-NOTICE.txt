@@ -1,0 +1,10 @@
+CodeMirror 5.65.16 — https://codemirror.net/5/
+Copyright (C) 2017 by Marijn Haverbeke <marijn@haverbeke.berlin> and others
+Licencia MIT: https://github.com/codemirror/codemirror5/blob/master/LICENSE
+
+Archivos vendoreados sin modificar desde cdnjs para que GAG-WV funcione
+100% local, sin CDN:
+  codemirror.min.js / codemirror.min.css   (núcleo)
+  javascript.min.js                        (modo JSON/JS)
+  foldcode.min.js / foldgutter.min.js /
+  brace-fold.min.js / foldgutter.min.css   (plegado por llaves)
