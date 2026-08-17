@@ -185,6 +185,9 @@
   #lienzo svg { display: block; background: white; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
   #lienzo [id], #lienzo .ag-container, #lienzo text, #lienzo polyline { cursor: pointer; }
   #lienzo .sel-resaltado { filter: drop-shadow(0 0 4px #2563eb) drop-shadow(0 0 8px #2563eb88); }
+  /* Una línea de 2px con glow apenas se nota: recolorear y engrosar */
+  #lienzo polyline.sel-resaltado { stroke: var(--acento); stroke-width: 3.5px; }
+  #lienzo text.sel-resaltado:not(.ag-text-halo) { fill: var(--acento); font-weight: 600; }
   #chip-sel {
     font-size: 11.5px;
     color: var(--acento);
@@ -593,11 +596,11 @@
     return null;
   }
 
-  function seleccionarRango(r, descripcion, nodoSvg) {
+  function seleccionarRango(r, descripcion, nodos) {
     if (!r) { mostrarChip(descripcion + ' — no encontrado en el JSON'); return; }
     editor.seleccionar(r[0], r[1]);   // despliega si estaba colapsado
     mostrarChip(descripcion);
-    resaltarNodo(nodoSvg);
+    resaltarNodos(nodos);
   }
 
   let chipTimer = null;
@@ -609,10 +612,53 @@
     chipTimer = setTimeout(() => chip.style.display = 'none', 6000);
   }
 
-  function resaltarNodo(n) {
+  function resaltarNodo(n) { resaltarNodos(n ? [n] : []); }
+
+  function resaltarNodos(nodos) {
     lienzo.querySelectorAll('.sel-resaltado')
       .forEach(x => x.classList.remove('sel-resaltado'));
-    if (n && n.classList) n.classList.add('sel-resaltado');
+    (nodos || []).filter(Boolean)
+      .forEach(n => n.classList && n.classList.add('sel-resaltado'));
+  }
+
+  const cssId = id => (window.CSS && CSS.escape) ? CSS.escape(id) : id;
+
+  function nodosDeElemento(svg, id) {
+    // Figuras del SVG que representan al elemento `id`: su <g>, el icono
+    // de contenedor (sufijo _icon) y el rect del contenedor si existe.
+    if (!svg) return [];
+    const res = [];
+    const g = svg.querySelector('#' + cssId(id));
+    if (g) res.push(g);
+    const icono = svg.querySelector('#' + cssId(id + '_icon'));
+    if (icono) {
+      res.push(icono);
+      const rect = icono.previousElementSibling;
+      if (rect && rect.classList && rect.classList.contains('ag-container'))
+        res.push(rect);
+    }
+    return res;
+  }
+
+  // Comparación tolerante: el SVG puede llevar el label multilínea entero
+  // dentro de un solo <text> (con \n literal que el navegador colapsa).
+  const normalizarTexto = s => (s || '').replace(/\s+/g, ' ').trim();
+
+  function textosDeEtiqueta(svg, label) {
+    if (!svg || !label) return [];
+    const buscados = new Set(
+      label.split('\n').map(normalizarTexto).filter(Boolean));
+    buscados.add(normalizarTexto(label));
+    return Array.from(svg.querySelectorAll('text'))
+      .filter(t => buscados.has(normalizarTexto(t.textContent)));
+  }
+
+  function caminoDeConexion(svg, conn, polylineOriginal) {
+    // El camino completo: la línea, ambos extremos y su etiqueta.
+    return [polylineOriginal,
+            ...nodosDeElemento(svg, conn.from),
+            ...nodosDeElemento(svg, conn.to),
+            ...textosDeEtiqueta(svg, conn.label)];
   }
 
   function jsonActual() {
@@ -622,13 +668,25 @@
   function irPorTexto(lineaClic) {
     const data = jsonActual();
     if (!data) return false;
-    const coincide = obj => (obj.label || '').split('\n')
-      .some(l => l.trim() === lineaClic);
+    const objetivo = normalizarTexto(lineaClic);
+    const coincide = obj => {
+      const lab = obj.label || '';
+      return lab.split('\n').map(normalizarTexto).includes(objetivo)
+          || normalizarTexto(lab) === objetivo;
+    };
     const el = (data.elements || []).find(coincide);
-    if (el && el.id) return { r: rangoPorId(el.id), desc: `elemento "${el.id}"` };
+    if (el && el.id) return { r: rangoPorId(el.id), desc: `elemento "${el.id}"`,
+                              nodos: nodosDeElemento(svgActual, el.id) };
     const conn = (data.connections || []).find(coincide);
-    if (conn) return { r: rangoConexion(conn.from, conn.to),
-                       desc: `conexión ${conn.from} → ${conn.to}` };
+    if (conn) {
+      const originales = Array.from(svgActual.querySelectorAll(
+        'polyline[marker-end], polyline[marker-start]'));
+      const poly = originales.length === (data.connections || []).length
+        ? originales[data.connections.indexOf(conn)] : null;
+      return { r: rangoConexion(conn.from, conn.to),
+               desc: `conexión ${conn.from} → ${conn.to}`,
+               nodos: caminoDeConexion(svgActual, conn, poly) };
+    }
     return false;
   }
 
@@ -644,7 +702,7 @@
     const c = data.connections[idx];
     return { r: rangoConexion(c.from, c.to),
              desc: `conexión ${c.from} → ${c.to}`,
-             nodo: originales[idx] };
+             nodos: caminoDeConexion(svg, c, originales[idx]) };
   }
 
   const ID_INTERNO = /^(gradient-|arrow-|circle-|text-glow)/;
@@ -657,7 +715,8 @@
       if (n.tagName === 'polyline' && !poly) poly = n;
       if (n.id && !ID_INTERNO.test(n.id)) {
         const id = n.id.replace(/_icon$/, '');
-        seleccionarRango(rangoPorId(id), `elemento "${id}"`, n);
+        seleccionarRango(rangoPorId(id), `elemento "${id}"`,
+                         nodosDeElemento(svgActual, id));
         return;
       }
       if (n.classList && n.classList.contains('ag-container')) {
@@ -666,7 +725,8 @@
         const sib = n.nextElementSibling;
         if (sib && sib.id && !ID_INTERNO.test(sib.id)) {
           const id = sib.id.replace(/_icon$/, '');
-          seleccionarRango(rangoPorId(id), `contenedor "${id}"`, n);
+          seleccionarRango(rangoPorId(id), `contenedor "${id}"`,
+                           nodosDeElemento(svgActual, id));
           return;
         }
       }
@@ -674,7 +734,8 @@
     }
     let res = textoClic ? irPorTexto(textoClic) : false;
     if (!res && poly) res = irPorPolyline(poly, svgActual);
-    if (res) seleccionarRango(res.r, res.desc, res.nodo || poly || e.target);
+    if (res) seleccionarRango(res.r, res.desc,
+                              res.nodos || [poly || e.target]);
     else resaltarNodo(null);   // clic en el fondo: limpiar resaltado
   });
 

@@ -71,7 +71,9 @@ python -m gagwv --no-browser      # no abrir el navegador
   etiqueta o conexión del diagrama y el editor selecciona y hace scroll al
   objeto JSON que lo definió (prefiriendo la definición en `elements` sobre
   referencias en `contains`/`journeys`), con un resaltado azul sobre la
-  figura y un chip que dice qué se encontró. Las conexiones tienen una zona
+  figura y un chip que dice qué se encontró. Al seleccionar una conexión se
+  ilumina su **camino completo**: la línea entera (azul, más gruesa), el
+  nodo de origen, el de destino y su etiqueta. Las conexiones tienen una zona
   de clic ancha invisible para no tener que acertarle a la línea de 2px.
 - **Aviso de motor desactualizado**: al abrir el visor compara tu AlmaGag
   local contra `master` en GitHub (commit git si es un clon; versión de
