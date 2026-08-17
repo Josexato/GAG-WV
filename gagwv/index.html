@@ -183,10 +183,11 @@
   }
   #lienzo { padding: 20px; display: inline-block; }
   #lienzo svg { display: block; background: white; box-shadow: 0 1px 6px rgba(0,0,0,.15); }
-  #lienzo [id], #lienzo .ag-container, #lienzo text, #lienzo polyline { cursor: pointer; }
+  #lienzo [id], #lienzo .ag-container, #lienzo text, #lienzo polyline, #lienzo path { cursor: pointer; }
   #lienzo .sel-resaltado { filter: drop-shadow(0 0 4px #2563eb) drop-shadow(0 0 8px #2563eb88); }
   /* Una línea de 2px con glow apenas se nota: recolorear y engrosar */
-  #lienzo polyline.sel-resaltado { stroke: var(--acento); stroke-width: 3.5px; }
+  #lienzo polyline.sel-resaltado:not(.ag-journey),
+  #lienzo path.sel-resaltado { stroke: var(--acento); stroke-width: 3.5px; }
   #lienzo text.sel-resaltado:not(.ag-text-halo) { fill: var(--acento); font-weight: 600; }
   #chip-sel {
     font-size: 11.5px;
@@ -504,19 +505,27 @@
     $('btn-descargar').disabled = false;
     $('btn-exportar').disabled = false;
     $('btn-pdf').disabled = false;
-    // Zona de clic ancha e invisible sobre cada conexión (2px es muy fino)
-    svgActual.querySelectorAll('polyline[marker-end], polyline[marker-start]')
-      .forEach((pl, i) => {
-        pl.dataset.connIdx = i;
-        const hit = pl.cloneNode(false);
-        hit.removeAttribute('marker-end');
-        hit.removeAttribute('marker-start');
-        hit.setAttribute('stroke', 'transparent');
-        hit.setAttribute('stroke-width', '12');
-        hit.setAttribute('fill', 'none');
-        hit.dataset.connIdx = i;
-        pl.after(hit);
-      });
+    // Zona de clic ancha e invisible sobre cada conexión (2px es muy fino).
+    // Un conector puede ser <polyline> (motor clásico) o <path> (ruteo
+    // ortogonal con esquinas redondeadas); las bandas de journey van aparte.
+    conectoresDe(svgActual).forEach((el, i) => {
+      el.dataset.connIdx = i;
+      const hit = el.cloneNode(false);
+      hit.removeAttribute('marker-end');
+      hit.removeAttribute('marker-start');
+      hit.setAttribute('stroke', 'transparent');
+      hit.setAttribute('stroke-width', '12');
+      hit.setAttribute('fill', 'none');
+      hit.dataset.connIdx = i;
+      hit.dataset.hit = '1';
+      el.after(hit);
+    });
+    // Bandas de journey (trazos anchos) y sus muestras en la leyenda
+    // (<line> cortos): ambas mapean al mismo journey por orden.
+    svgActual.querySelectorAll('polyline.ag-journey, path.ag-journey')
+      .forEach((el, i) => { el.dataset.journeyIdx = i; });
+    svgActual.querySelectorAll('line.ag-journey')
+      .forEach((el, i) => { el.dataset.journeyIdx = i; });
     aplicarZoom(zoom);
   }
 
@@ -679,25 +688,45 @@
                               nodos: nodosDeElemento(svgActual, el.id) };
     const conn = (data.connections || []).find(coincide);
     if (conn) {
-      const originales = Array.from(svgActual.querySelectorAll(
-        'polyline[marker-end], polyline[marker-start]'));
-      const poly = originales.length === (data.connections || []).length
+      const originales = conectoresDe(svgActual);
+      const trazo = originales.length === (data.connections || []).length
         ? originales[data.connections.indexOf(conn)] : null;
       return { r: rangoConexion(conn.from, conn.to),
                desc: `conexión ${conn.from} → ${conn.to}`,
-               nodos: caminoDeConexion(svgActual, conn, poly) };
+               nodos: caminoDeConexion(svgActual, conn, trazo) };
+    }
+    const jr = (data.journeys || []).find(coincide);
+    if (jr) {
+      const bandas = Array.from(svgActual.querySelectorAll(
+        'polyline.ag-journey, path.ag-journey'));
+      const idx = data.journeys.indexOf(jr);
+      const nodos = bandas.length === data.journeys.length ? [bandas[idx]] : [];
+      (jr.path || []).forEach(id => nodos.push(...nodosDeElemento(svgActual, id)));
+      return { r: rangoPorId(jr.id), desc: `journey "${jr.id || jr.label}"`, nodos };
     }
     return false;
   }
 
-  function irPorPolyline(poly, svg) {
+  function conectoresDe(svg) {
+    // Trazos de conexión: paths/polylines de nivel superior (fuera de los
+    // <g id> de nodos y de <defs>), sin relleno y con stroke; excluye las
+    // bandas de journey y los clones de zona de clic.
+    return Array.from(svg.querySelectorAll('path, polyline')).filter(el =>
+      !el.closest('defs') &&
+      !el.closest('g[id]') &&
+      !el.classList.contains('ag-journey') &&
+      !el.dataset.hit &&
+      (el.getAttribute('fill') || '').toLowerCase() === 'none' &&
+      el.getAttribute('stroke'));
+  }
+
+  function irPorConector(trazo, svg) {
     const data = jsonActual();
     if (!data || !Array.isArray(data.connections)) return false;
-    const originales = Array.from(
-      svg.querySelectorAll('polyline[marker-end], polyline[marker-start]'));
-    // Sólo confiable si hay una polilínea por conexión (mismo orden de dibujo)
+    const originales = conectoresDe(svg);
+    // Sólo confiable si hay un trazo por conexión (mismo orden de dibujo)
     if (originales.length !== data.connections.length) return false;
-    const idx = parseInt(poly.dataset.connIdx ?? '-1', 10);
+    const idx = parseInt(trazo.dataset.connIdx ?? '-1', 10);
     if (idx < 0 || idx >= data.connections.length) return false;
     const c = data.connections[idx];
     return { r: rangoConexion(c.from, c.to),
@@ -705,14 +734,32 @@
              nodos: caminoDeConexion(svg, c, originales[idx]) };
   }
 
+  function irPorJourney(banda, svg) {
+    const data = jsonActual();
+    const journeys = data && data.journeys;
+    if (!Array.isArray(journeys)) return false;
+    const bandas = Array.from(
+      svg.querySelectorAll('polyline.ag-journey, path.ag-journey'));
+    if (bandas.length !== journeys.length) return false;
+    const idx = parseInt(banda.dataset.journeyIdx ?? '-1', 10);
+    if (idx < 0 || idx >= journeys.length) return false;
+    const j = journeys[idx];
+    const nodos = [bandas[idx]];
+    (j.path || []).forEach(id => nodos.push(...nodosDeElemento(svg, id)));
+    return { r: rangoPorId(j.id), desc: `journey "${j.id || j.label || idx}"`,
+             nodos };
+  }
+
   const ID_INTERNO = /^(gradient-|arrow-|circle-|text-glow)/;
 
   lienzo.addEventListener('click', e => {
-    let n = e.target, textoClic = null, poly = null;
+    let n = e.target, textoClic = null, trazo = null;
     while (n && n !== lienzo) {
       if (n.tagName === 'text' && textoClic === null)
         textoClic = (n.textContent || '').trim();
-      if (n.tagName === 'polyline' && !poly) poly = n;
+      if ((n.tagName === 'polyline' || n.tagName === 'path' ||
+           n.tagName === 'line') && !trazo)
+        trazo = n;
       if (n.id && !ID_INTERNO.test(n.id)) {
         const id = n.id.replace(/_icon$/, '');
         seleccionarRango(rangoPorId(id), `elemento "${id}"`,
@@ -733,9 +780,14 @@
       n = n.parentNode;
     }
     let res = textoClic ? irPorTexto(textoClic) : false;
-    if (!res && poly) res = irPorPolyline(poly, svgActual);
+    if (!res && trazo) {
+      if (trazo.dataset.journeyIdx !== undefined)
+        res = irPorJourney(trazo, svgActual);
+      else if (trazo.dataset.connIdx !== undefined)
+        res = irPorConector(trazo, svgActual);
+    }
     if (res) seleccionarRango(res.r, res.desc,
-                              res.nodos || [poly || e.target]);
+                              res.nodos || [trazo || e.target]);
     else resaltarNodo(null);   // clic en el fondo: limpiar resaltado
   });
 
