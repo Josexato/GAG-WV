@@ -291,6 +291,9 @@
       <button id="btn-exportar" disabled
         title="ZIP con el JSON fuente + SVG (+ fases si hay) para enviarlo a un análisis de diseño">
         📦 Exportar análisis</button>
+      <button id="btn-xlsx" disabled
+        title="Excel con una hoja por sección: Elements, Connections, Areas y Journeys">
+        📊 Excel</button>
       <button id="btn-pdf" disabled
         title="PDF vectorial de la pestaña visible (Chrome/Edge headless; sin navegador, abre el diálogo de impresión)">
         🖨 PDF</button>
@@ -505,6 +508,7 @@
     $('btn-descargar').disabled = false;
     $('btn-exportar').disabled = false;
     $('btn-pdf').disabled = false;
+    $('btn-xlsx').disabled = false;
     // Zona de clic ancha e invisible sobre cada conexión (2px es muy fino).
     // Un conector puede ser <polyline> (motor clásico) o <path> (ruteo
     // ortogonal con esquinas redondeadas); las bandas de journey van aparte.
@@ -828,6 +832,30 @@
       URL.revokeObjectURL(a.href);
     } catch (err) {
       mostrarLog('[ERROR] No se pudo exportar: ' + err);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---------- exportar Excel (elements/connections/areas/journeys) ----------
+  $('btn-xlsx').addEventListener('click', async () => {
+    const btn = $('btn-xlsx');
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/exportar-xlsx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: leerNombre(), json: editor.value }),
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      const blob = await resp.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = leerNombre().replace(/\.(sdjf|gag|json)$/i, '') + '.xlsx';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      mostrarLog('[ERROR] No se pudo exportar a Excel: ' + err);
     } finally {
       btn.disabled = false;
     }

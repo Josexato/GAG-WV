@@ -51,6 +51,10 @@ python -m gagwv --no-browser      # no abrir el navegador
   mismo scroll y zoom. *Descargar SVG* baja la pestaña visible.
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
+- **Exportar a Excel**: el botón *📊 Excel* descarga un `.xlsx` con una hoja
+  por sección — Elements, Connections, Areas y Journeys — con las columnas
+  conocidas primero y cualquier campo extra como JSON en la columna `otros`.
+  Generado en stdlib pura, sin dependencias nuevas.
 - **Exportar a PDF**: el botón *🖨 PDF* genera un PDF vectorial de la
   pestaña visible al tamaño exacto del diagrama, usando el Chrome/Edge ya
   instalado en modo headless (mismo detector §O58 del motor, incluida la

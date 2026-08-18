@@ -211,6 +211,34 @@ class VisorHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(datos)
 
+    def _exportar_xlsx(self):
+        """POST /exportar-xlsx {filename, json} → Excel con una hoja por
+        sección (Elements, Connections, Areas, Journeys)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            data = json.loads(payload.get('json') or '')
+            if not isinstance(data, dict):
+                raise ValueError('la fuente no es un objeto JSON')
+        except (ValueError, UnicodeDecodeError) as e:
+            self._send(HTTPStatus.BAD_REQUEST, f'Petición inválida: {e}',
+                       'text/plain')
+            return
+
+        from gagwv.xlsx import libro_desde_sdjf
+        datos = libro_desde_sdjf(data)
+        base = os.path.splitext(
+            os.path.basename(payload.get('filename') or 'diagrama'))[0]
+        self.send_response(HTTPStatus.OK)
+        self.send_header('Content-Type',
+                         'application/vnd.openxmlformats-officedocument.'
+                         'spreadsheetml.sheet')
+        self.send_header('Content-Disposition',
+                         f'attachment; filename="{base}.xlsx"')
+        self.send_header('Content-Length', str(len(datos)))
+        self.end_headers()
+        self.wfile.write(datos)
+
     def _exportar_pdf(self):
         """POST /exportar-pdf {filename, svg} → PDF vectorial vía Chrome
         headless. 501 si no hay navegador (la UI cae al diálogo de
@@ -267,6 +295,9 @@ class VisorHandler(BaseHTTPRequestHandler):
             return
         if self.path == '/exportar-pdf':
             self._exportar_pdf()
+            return
+        if self.path == '/exportar-xlsx':
+            self._exportar_xlsx()
             return
         if self.path != '/render':
             self._send(HTTPStatus.NOT_FOUND, 'No encontrado', 'text/plain')
