@@ -43,7 +43,7 @@ python -m gagwv --no-browser      # no abrir el navegador
 - **Derecha**: el SVG en un contenedor con scroll, con zoom (`+`/`−`, `1:1`,
   *Ajustar* al ancho, `Ctrl+rueda` del mouse) y botón para descargar el SVG.
 - Opciones del motor: layout (`select`/`auto`/`hier`/`legacy`), vista
-  (`flow`/`areas`/`lanes`/`matrix`) y `visualdebug`.
+  (`columns`/`areas`/`lanes`/`matrix`) y `visualdebug`.
 - **Epifanía en pestañas**: con el checkbox *epifanía (fases)* activo, el
   render también captura el flipbook del layout naciendo (equivale a
   `--epifania` del CLI) y cada fase aparece como una pestaña sobre el visor
@@ -52,9 +52,10 @@ python -m gagwv --no-browser      # no abrir el navegador
 - Los errores del motor (JSON malformado, etc.) aparecen en rojo bajo el
   editor.
 - **Exportar a Excel**: el botón *📊 Excel* descarga un `.xlsx` con una hoja
-  por sección — Elements, Connections, Areas y Journeys — con las columnas
-  conocidas primero y cualquier campo extra como JSON en la columna `otros`.
-  Generado en stdlib pura, sin dependencias nuevas.
+  por sección — Elements, Connections, Areas y Journeys siempre, más Lanes,
+  Unions y Roles cuando el archivo las declara — con las columnas conocidas
+  primero y cualquier campo extra como JSON en la columna `otros`. Generado
+  en stdlib pura, sin dependencias nuevas.
 - **Exportar a PDF**: el botón *🖨 PDF* genera un PDF vectorial de la
   pestaña visible al tamaño exacto del diagrama, usando el Chrome/Edge ya
   instalado en modo headless (mismo detector §O58 del motor, incluida la

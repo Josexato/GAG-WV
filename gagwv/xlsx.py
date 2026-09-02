@@ -11,7 +11,7 @@ import json
 import zipfile
 from xml.sax.saxutils import escape
 
-# (hoja, clave raíz, columnas conocidas)
+# (hoja, clave raíz, columnas conocidas) — siempre presentes
 SECCIONES = [
     ('Elements', 'elements',
      ['id', 'label', 'type', 'color', 'contains']),
@@ -21,6 +21,13 @@ SECCIONES = [
      ['id', 'label', 'color', 'members']),
     ('Journeys', 'journeys',
      ['id', 'label', 'color', 'path']),
+]
+
+# Secciones opcionales del formato (v3.20): la hoja sólo se crea si la
+# clave existe en el archivo. `roles` es un dict {id: {label, color}}.
+SECCIONES_OPCIONALES = [
+    ('Lanes', 'lanes', ['id', 'label', 'members']),
+    ('Unions', 'unions', ['id', 'between']),
 ]
 
 
@@ -100,10 +107,33 @@ _STYLES = (
     '</cellStyles></styleSheet>')
 
 
+def _filas_roles(mapa):
+    """`roles` es un dict {id: {label, color}} (§I30), no una lista."""
+    filas = [['id', 'label', 'color', 'otros']]
+    for clave, v in (mapa or {}).items():
+        if isinstance(v, dict):
+            extras = {k: x for k, x in v.items()
+                      if k not in ('label', 'color')}
+            filas.append([clave,
+                          _celda_texto(v.get('label'), 'label'),
+                          _celda_texto(v.get('color'), 'color'),
+                          json.dumps(extras, ensure_ascii=False)
+                          if extras else ''])
+        else:
+            filas.append([clave, _celda_texto(v, ''), '', ''])
+    return filas
+
+
 def libro_desde_sdjf(data):
-    """bytes de un .xlsx con hojas Elements/Connections/Areas/Journeys."""
+    """bytes de un .xlsx: hojas Elements/Connections/Areas/Journeys fijas,
+    más Lanes/Unions/Roles cuando el archivo declara esas secciones."""
     hojas = [(nombre, _filas_de_seccion(data.get(clave), columnas))
              for nombre, clave, columnas in SECCIONES]
+    for nombre, clave, columnas in SECCIONES_OPCIONALES:
+        if clave in data:
+            hojas.append((nombre, _filas_de_seccion(data.get(clave), columnas)))
+    if isinstance(data.get('roles'), dict):
+        hojas.append(('Roles', _filas_roles(data['roles'])))
 
     sheets_xml = ''.join(
         f'<sheet name="{escape(nombre)}" sheetId="{i}" r:id="rId{i}"/>'

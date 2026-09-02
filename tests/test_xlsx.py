@@ -57,6 +57,19 @@ def test_libro_secciones_vacias_no_revienta():
     assert all(len(filas) == 1 for filas in hojas.values())  # solo cabecera
 
 
+def test_libro_secciones_opcionales():
+    data = dict(DATA)
+    data['lanes'] = [{'id': 'com', 'label': 'Comercial', 'members': ['a']}]
+    data['unions'] = [{'id': 'u1', 'between': ['a', 'b']}]
+    data['roles'] = {'com': {'label': 'Consultor', 'color': '#2a6fdb'}}
+    hojas = _hojas(libro_desde_sdjf(data))
+    assert list(hojas) == ['Elements', 'Connections', 'Areas', 'Journeys',
+                           'Lanes', 'Unions', 'Roles']
+    assert hojas['Lanes'][1][:3] == ['com', 'Comercial', 'a']
+    assert hojas['Unions'][1][1] == 'a, b'
+    assert hojas['Roles'][1][:3] == ['com', 'Consultor', '#2a6fdb']
+
+
 def test_endpoint_exportar_xlsx():
     def caso(puerto):
         conn = http.client.HTTPConnection('127.0.0.1', puerto, timeout=10)
